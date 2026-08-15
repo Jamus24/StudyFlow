@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0c1222"/>
+      <stop offset="1" stop-color="#0f2a23"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="40" y1="40" x2="160" y2="160" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1e40af"/>
+      <stop offset="0.55" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g opacity="0.5">
+    <circle cx="980" cy="120" r="220" fill="#2563eb" opacity="0.18"/>
+    <circle cx="1080" cy="520" r="180" fill="#f59e0b" opacity="0.14"/>
+  </g>
+  <g transform="translate(80,80)">
+    <rect width="80" height="80" rx="20" fill="url(#brand)"/>
+    <path d="M40 18c-9 0-16.3 7.3-16.3 16.3 0 6 3.3 11.3 8 14.1V58a3.7 3.7 0 0 0 3.8 3.7h9A3.7 3.7 0 0 0 48 58v-9.6c4.8-2.8 8-8 8-14.1C56 25.3 48.8 18 40 18Z" fill="white"/>
+    <circle cx="40" cy="33" r="5.3" fill="#1e40af"/>
+  </g>
+  <text x="80" y="280" font-family="Georgia, serif" font-size="76" font-weight="600" fill="#f8faf5">Lumina</text>
+  <text x="84" y="340" font-family="Inter, system-ui, sans-serif" font-size="34" font-weight="500" fill="#9fb3ad">AI Study Planner for Students</text>
+  <text x="84" y="430" font-family="Inter, system-ui, sans-serif" font-size="28" fill="#7d948c">Plans that adapt to your syllabus. Flashcards</text>
+  <text x="84" y="470" font-family="Inter, system-ui, sans-serif" font-size="28" fill="#7d948c">that remember what you forget. A tutor that</text>
+  <text x="84" y="510" font-family="Inter, system-ui, sans-serif" font-size="28" fill="#7d948c">knows what you're studying this week.</text>
+</svg>
