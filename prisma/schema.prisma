@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "libsql"
   url      = env("DATABASE_URL")
 }
 
