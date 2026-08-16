@@ -12,11 +12,8 @@ async function gemini(
   messages: { role: "user" | "assistant"; content: string }[],
   opts: { temperature?: number } = {}
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/interactions`;
-
-  // Build the input array for stateless multi-turn
+  const url = "https://generativelanguage.googleapis.com/v1beta/interactions";
   const input: { type: string; content: string }[] = [];
-
   for (const m of messages) {
     if (m.role === "user") {
       input.push({ type: "user_input", content: m.content });
@@ -24,18 +21,13 @@ async function gemini(
       input.push({ type: "model_output", content: m.content });
     }
   }
-
-  // For single message, simplify to a string
   const body: Record<string, unknown> = {
     model: GEMINI_MODEL,
     system_instruction: system,
     input: input.length === 1 ? input[0].content : input,
     store: false,
-    generation_config: {
-      temperature: opts.temperature ?? 0.7,
-    },
+    generation_config: { temperature: opts.temperature ?? 0.7 },
   };
-
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -44,21 +36,13 @@ async function gemini(
     },
     body: JSON.stringify(body),
   });
-
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Gemini API error ${res.status}: ${err}`);
+    throw new Error("Gemini API error " + res.status + ": " + err);
   }
-
   const data = await res.json();
-
-  // Interactions API returns output_text directly, but also check candidates format
-  if (data?.output_text) return data.output_text as string;
-  if (data?.candidates?.[0]?.content?.parts?.[0]?.text)
-    return data.candidates[0].content.parts[0].text as string;
-  if (data?.response?.candidates?.[0]?.content?.parts?.[0]?.text)
-    return data.response.candidates[0].content.parts[0].text as string;
-
+  if (data && data.output_text) return data.output_text;
+  if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) return data.candidates[0].content.parts[0].text;
   return "";
 }
 
