@@ -10,8 +10,9 @@ async function gemini(
 ): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
+  // Gemini uses "user" and "model" roles. We prepend system as a user message.
   const contents = [
-    { role: "user", parts: [{ text: `[<System Instructions>]\n${system}` }] },
+    { role: "user", parts: [{ text: `[System Instructions]\n${system}` }] },
     { role: "model", parts: [{ text: "Understood. I will follow these instructions." }] },
     ...messages.map((m) => ({
       role: m.role === "assistant" ? ("model" as const) : ("user" as const),
@@ -24,7 +25,9 @@ async function gemini(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents,
-      generationConfig: {* temperature: opts.temperature ?? 0.7*/,
+      generationConfig: {
+        temperature: opts.temperature ?? 0.7,
+      },
     }),
   });
 
@@ -48,9 +51,11 @@ export async function chatJSON(
 /* ---- Extract a JSON object from a possibly-noisy model reply ---- */
 export function extractJSON<T = unknown>(raw: string): T | null {
   if (!raw) return null;
+  // strip code fences
   let s = raw.trim();
-  const fence = s.match(/``` (?:json)?\s*([\s\S]*?)```/i);
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) s = fence[1].trim();
+  // find first { ... last }
   const first = s.indexOf("{");
   const last = s.lastIndexOf("}");
   const firstArr = s.indexOf("[");
@@ -125,18 +130,36 @@ ${input.subjects
       }`
   )
   .join("\n")}
-Week areas: ${input.weeknesses || "none specified"}`;
+Weak areas: ${input.weaknesses || "none specified"}`;
 
   const raw = await chatJSON(system, user, { temperature: 0.7 });
   const parsed = extractJSON<GeneratedPlan>(raw);
   if (parsed && parsed.days) return parsed;
+  // fallback minimal plan
   return {
     title: `${input.horizon === "week" ? "Weekly" : input.horizon === "month" ? "Monthly" : "Exam"} plan - ${input.subjects[0]?.name ?? "Study"}`,
-    summary: "A balanced plan mixing review, active practice, and spaced repetition across your subjects.",
+    summary:
+      "A balanced plan mixing review, active practice, and spaced repetition across your subjects.",
     weeklyMinutes: input.hoursPerWeek * 60,
-    principles: ["Active recall beats re-reading", "Space out reviews to strengthen memory", "Mix subjects to improve transfer"],
-    days: [{ day: "Mon", focus: "Deep work", blocks: [{ time: "16:00", durationMin: 45, subject: input.subjects[0]?.name ?? "Study", activity: "Active recall practice", type: "practice" }, { time: "16:50", durationMin: 10, subject: "Break", activity: "Walk, hydrate", type: "break" }] }],
-    tips: ["Write questions from your notes, then answer from memory", "Teach a concept aloud to spot gaps"],
+    principles: [
+      "Active recall beats re-reading",
+      "Space out reviews to strengthen memory",
+      "Mix subjects to improve transfer",
+    ],
+    days: [
+      {
+        day: "Mon",
+        focus: "Deep work",
+        blocks: [
+          { time: "16:00", durationMin: 45, subject: input.subjects[0]?.name ?? "Study", activity: "Active recall practice", type: "practice" },
+          { time: "16:50", durationMin: 10, subject: "Break", activity: "Walk, hydrate", type: "break" },
+        ],
+      },
+    ],
+    tips: [
+      "Write questions from your notes, then answer from memory",
+      "Teach a concept aloud to spot gaps",
+    ],
   };
 }
 
@@ -151,14 +174,17 @@ export async function generateFlashcards(input: {
 }): Promise<FlashcardSet> {
   const system = `You are a spaced-repetition card author for students.
 Return ONLY JSON (no prose, no fences): { "cards": [{ "front": string (a clear question or prompt), "back": string (concise answer, <240 chars) }] }
-Rules: make ${input.count} cards. Fronts must be answerable without context. Prefer conceptual understanding over trivia. Difficulty: ${input.difficulty ?? "medium"}`;
-  const raw = await chatJSON(system, `Source material:\n\n${input.source.slice(0, 8000)}`, { temperature: 0.5 });
+Rules: make ${input.count} cards. Fronts must be answerable without context. Prefer conceptual understanding over trivia. Difficulty: ${input.difficulty ?? "medium"}.`;
+  const raw = await chatJSON(system, `Source material:\n\n${input.source.slice(0, 8000)}`, {
+    temperature: 0.5,
+  });
   const parsed = extractJSON<FlashcardSet>(raw);
   return parsed && parsed.cards?.length ? parsed : { cards: [] };
 }
 
 export async function summarizeNote(content: string): Promise<string> {
-  const system = "You summarize student notes into tight, scannable summaries. Return 3-5 bullet points, each under 12 words, no headings, no fluff. Avoid cliches.";
+  const system =
+    "You summarize student notes into tight, scannable summaries. Return 3-5 bullet points, each under 12 words, no headings, no fluff. Avoid cliches.";
   return (await chatJSON(system, content.slice(0, 8000), { temperature: 0.4 })).trim();
 }
 
@@ -178,7 +204,8 @@ export async function tutorReply(input: {
 }
 
 export async function suggestTitle(text: string): Promise<string> {
-  const system = "Return a short title (max 6 words, Title Case, no quotes, no punctuation at end) summarising this note.";
+  const system =
+    "Return a short title (max 6 words, Title Case, no quotes, no punctuation at end) summarising this note.";
   const raw = await chatJSON(system, text.slice(0, 1200), { temperature: 0.3 });
   return raw.replace(/["'.]/g, "").trim().slice(0, 60) || "Untitled note";
 }
@@ -189,7 +216,8 @@ export async function weeklyInsights(input: {
   topSubject: string;
   goalMin: number;
 }): Promise<string> {
-  const system = "You are Study Flow's coach. Given a student's weekly stats, write a 2-3 sentence insight with one specific, non-generic suggestion. No emoji. No cliches.";
+  const system =
+    "You are Study Flow's coach. Given a student's weekly stats, write a 2-3 sentence insight with one specific, non-generic suggestion. No emoji. No cliches.";
   const user = `Minutes studied: ${input.minutes} (goal ${input.goalMin}). Tasks completed: ${input.tasksDone}. Most-studied subject: ${input.topSubject}.`;
   return (await chatJSON(system, user, { temperature: 0.5 })).trim();
 }
