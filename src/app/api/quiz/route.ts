@@ -50,7 +50,7 @@ Return ONLY a JSON object (no prose, no code fences):
 }
 Rules: exactly ${count} questions. Difficulty: ${difficulty}. Subject: ${subjectName}. Topic focus: ${topic}. Options should be plausible but only one correct. Explanations should be concise and educational.`;
 
-    const raw = await chatJSON(system, `Generate ${count} ${difficulty} questions about "${topic}" for ${subjectName}.`)`
+    const raw = await chatJSON(system, `Generate ${count} ${difficulty} questions about "${topic}" for ${subjectName}.`)`;
 
     // extract JSON from response
     const match = raw.match(/\{[\s\S]*\}/);
