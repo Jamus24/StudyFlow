@@ -153,7 +153,7 @@ export async function GET() {
       try {
         const sys = `You are a study coach. Given a student's current state, suggest ONE specific, actionable next step. Return ONLY a JSON object: {"title": string (under 40 chars), "description": string (under 100 chars, specific and non-generic)}. No clichés.`;
         const state = `Streak: ${streak}d. Week minutes: ${weekMinutes}/${user.weeklyGoalMin}. Overdue tasks: ${overdueTasks.length}. Due cards: ${dueCards}. Subjects: ${subjects.map((s) => s.name).join(", ") || "none"}. Plans: ${plans}. Studied today: ${studiedToday}.`;
-        const raw = await chatJSON(sys, state, { temperature: 0.6 });
+        const raw = await chatJSON(sys, state);
         const match = raw.match(/\{[\s\S]*\}/);
         if (match) {
           const parsed = JSON.parse(match[0]);

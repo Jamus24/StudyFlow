@@ -64,7 +64,7 @@ export async function GET() {
         const mostUrgent = enriched[0];
         const sys = `You are an exam prep strategist. Given a subject and days until the exam, return ONLY JSON: {"topics": [{"name": string, "priority": "critical"|"high"|"medium", "estHours": number, "reason": string (under 80 chars)}], "tips": [string (3-4 specific study tips, each under 60 chars)]}. Focus on high-yield topics. No clichés.`;
         const usr = `Subject: ${mostUrgent.name}. Days until exam: ${mostUrgent.daysUntil}. Target grade: ${mostUrgent.targetGrade || "B"}. Recent study: ${mostUrgent.recentMinutes}m in last 14 days. Open tasks: ${mostUrgent.tasksOpen}. Description: ${mostUrgent.description || "general"}.`;
-        const raw = await chatJSON(sys, usr, { temperature: 0.6 });
+        const raw = await chatJSON(sys, usr);
         const match = raw.match(/\{[\s\S]*\}/);
         if (match) prepStrategy = JSON.parse(match[0]);
       } catch {}

@@ -105,7 +105,7 @@ export async function GET() {
       try {
         const sys = `You are a study coach writing a weekly review. Return ONLY a JSON array of 3-4 short, specific, non-generic suggestions for next week based on the student's data. Each suggestion under 14 words. No clichés.`;
         const usr = `Week data: ${minutes7d}m studied (goal ${user.weeklyGoalMin}m), ${tasksDone} tasks done, ${sessions.length} sessions, top subject ${topSubject}, streak ${streak}d, avg focus ${avgFocus}/100. Subjects: ${[...bySubject.keys()].join(", ")}.`;
-        const raw = await chatJSON(sys, usr, { temperature: 0.6 });
+        const raw = await chatJSON(sys, usr);
         const parsed = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] || "[]");
         if (Array.isArray(parsed)) nextSteps = parsed.filter((x) => typeof x === "string").slice(0, 4);
       } catch {}
