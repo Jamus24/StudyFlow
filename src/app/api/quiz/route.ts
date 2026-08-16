@@ -61,7 +61,7 @@ Rules: exactly ${count} questions. Difficulty: ${difficulty}. Subject: ${subject
       throw new ApiError("AI_FAILED", "Quiz format was invalid. Try again.", 500);
     }
 
-    await db.activityLog.create({ data: { userId: user.id, action: "quiz.generated", meta: `${topic} - ${count}q` } });
+    await db.activityLog.create({ data: { userId: user.id, action: "quiz.generated", meta: topic +"-" + count + "q", } });
 
     return ok({
       quiz: {
