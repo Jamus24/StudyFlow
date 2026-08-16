@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import katex from "katex";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { api } from "@/lib/fetch";
@@ -613,6 +614,17 @@ function AssistantContent({ content }: { content: string }) {
   return (
     <div className="space-y-2.5">
       {blocks.map((b, i) => {
+        if (b.type === "math") {
+          return (
+            <div
+              key={i}
+              className="my-2 flex justify-center overflow-x-auto py-1"
+              dangerouslySetInnerHTML={{
+                __html: katex.renderToString(b.tex, { throwOnError: false, displayMode: true }),
+              }}
+            />
+          );
+        }
         if (b.type === "code") {
           return (
             <pre
@@ -663,10 +675,25 @@ type Block =
   | { type: "para"; text: string }
   | { type: "heading"; text: string }
   | { type: "list"; items: string[]; ordered: boolean }
-  | { type: "code"; text: string };
+  | { type: "code"; text: string }
+  | { type: "math"; tex: string };
 
 function parseBlocks(src: string): Block[] {
-  const lines = src.replace(/\r/g, "").split("\n");
+  // Extract display math $$...$$ first, replace with placeholders
+  const mathBlocks: { tex: string; placeholder: string }[] = [];
+  let cleaned = src;
+  const mathRe = /\$\$([\s\S]*?)\$\$/g;
+  let m: RegExpExecArray | null;
+  while ((m = mathRe.exec(cleaned)) !== null) {
+    const ph = `__MATH_${mathBlocks.length}__`;
+    mathBlocks.push({ tex: m[1].trim(), placeholder: ph });
+  }
+  cleaned = cleaned.replace(mathRe, () => {
+    const ph = `__MATH_${mathBlocks.length - 1}__`;
+    return `\n${ph}\n`;
+  });
+
+  const lines = cleaned.replace(/\r/g, "").split("\n");
   const blocks: Block[] = [];
   let para: string[] = [];
   let list: { items: string[]; ordered: boolean } | null = null;
@@ -714,6 +741,17 @@ function parseBlocks(src: string): Block[] {
       code.push(line);
       continue;
     }
+    // Display math placeholder
+    const mathMatch = line.match(/^__MATH_(\d+)__$/);
+    if (mathMatch) {
+      flushPara();
+      flushList();
+      const idx = parseInt(mathMatch[1], 10);
+      if (mathBlocks[idx]) {
+        blocks.push({ type: "math", tex: mathBlocks[idx].tex });
+      }
+      continue;
+    }
     if (!line.trim()) {
       flushPara();
       flushList();
@@ -749,8 +787,10 @@ function parseBlocks(src: string): Block[] {
 }
 
 function renderInline(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  // Split on bold, inline code, and inline math ($...$)
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\$[^$]+\$)/g);
   return parts.map((p, i) => {
+    // Bold
     if (/^\*\*[^*]+\*\*$/.test(p)) {
       return (
         <strong key={i} className="font-semibold">
@@ -758,6 +798,7 @@ function renderInline(text: string): React.ReactNode {
         </strong>
       );
     }
+    // Inline code
     if (/^`[^`]+`$/.test(p)) {
       return (
         <code
@@ -767,6 +808,16 @@ function renderInline(text: string): React.ReactNode {
           {p.slice(1, -1)}
         </code>
       );
+    }
+    // Inline math: $...$
+    if (/^\$.+\$$/.test(p)) {
+      const tex = p.slice(1, -1);
+      try {
+        const html = katex.renderToString(tex, { throwOnError: false, displayMode: false });
+        return <span key={i} dangerouslySetInnerHTML={{ __html: html }} className="inline-block align-middle" />;
+      } catch {
+        return <code key={i} className="text-xs text-red-400">{tex}</code>;
+      }
     }
     return <span key={i}>{p}</span>;
   });
