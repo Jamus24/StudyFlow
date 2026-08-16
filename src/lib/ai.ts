@@ -1,34 +1,48 @@
 import "server-only";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
-const GEMINI_MODEL = "gemini-pro";
+const GEMINI_MODEL = "gemini-2.5-flash";
 
+/**
+ * Google Gemini API using the Interactions API (v1beta).
+ * Docs: https://ai.google.dev/gemini-api/docs/text-generation
+ */
 async function gemini(
   system: string,
   messages: { role: "user" | "assistant"; content: string }[],
   opts: { temperature?: number } = {}
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/interactions`;
 
-  // Gemini uses "user" and "model" roles. We prepend system as a user message.
-  const contents = [
-    { role: "user", parts: [{ text: `[System Instructions]\n${system}` }] },
-    { role: "model", parts: [{ text: "Understood. I will follow these instructions." }] },
-    ...messages.map((m) => ({
-      role: m.role === "assistant" ? ("model" as const) : ("user" as const),
-      parts: [{ text: m.content }],
-    })),
-  ];
+  // Build the input array for stateless multi-turn
+  const input: { type: string; content: string }[] = [];
+
+  for (const m of messages) {
+    if (m.role === "user") {
+      input.push({ type: "user_input", content: m.content });
+    } else {
+      input.push({ type: "model_output", content: m.content });
+    }
+  }
+
+  // For single message, simplify to a string
+  const body: Record<string, unknown> = {
+    model: GEMINI_MODEL,
+    system_instruction: system,
+    input: input.length === 1 ? input[0].content : input,
+    store: false,
+    generation_config: {
+      temperature: opts.temperature ?? 0.7,
+    },
+  };
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents,
-      generationConfig: {
-        temperature: opts.temperature ?? 0.7,
-      },
-    }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": GEMINI_API_KEY,
+    },
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
@@ -37,7 +51,15 @@ async function gemini(
   }
 
   const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+  // Interactions API returns output_text directly, but also check candidates format
+  if (data?.output_text) return data.output_text as string;
+  if (data?.candidates?.[0]?.content?.parts?.[0]?.text)
+    return data.candidates[0].content.parts[0].text as string;
+  if (data?.response?.candidates?.[0]?.content?.parts?.[0]?.text)
+    return data.response.candidates[0].content.parts[0].text as string;
+
+  return "";
 }
 
 export async function chatJSON(
