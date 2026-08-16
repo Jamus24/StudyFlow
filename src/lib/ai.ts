@@ -14,7 +14,7 @@ async function gemini(
     if (m.role === "user") { input.push({ type: "user_input", content: m.content }); } else { input.push({ type: "model_output", content: m.content }); }
   }
   const body: Record<string, unknown> = { model: GEMINI_MODEL, system_instruction: system, input: input.length === 1 ? input[0].content : input, store: false, generation_config: { temperature: opts.temperature ?? 0.7 } };
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY }, body: JSON.stringify(body) });
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY, "x-goog-api-key": GEMINI_API_KEY }, body: JSON.stringify(body) });
   if (!res.ok) { const err = await res.text(); throw new Error(`Gemini API error ${res.status}: ${err}`); }
   const data = await res.json();
   if (data?.output_text) return data.output_text as string;
