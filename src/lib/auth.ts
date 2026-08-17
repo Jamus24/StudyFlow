@@ -133,10 +133,34 @@ export async function requireAdmin() {
   return u;
 }
 
+import { tierSatisfies, type Tier } from "./tier";
+import { ApiError } from "./api";
+
 export function generateToken(length = 32) {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
   let out = "";
   for (let i = 0; i < length; i++)
     out += chars[Math.floor(Math.random() * chars.length)];
   return out;
+}
+
+/**
+ * Throw a 403 UPGRADE_REQUIRED error if the user's planTier is below `required`.
+ * Returns the user on success so it can be chained: const user = await requireTier(await requireUser(), "pro");
+ */
+export function requireTier(
+  user: { planTier: string },
+  required: Tier,
+  feature?: string
+) {
+  if (!tierSatisfies(user.planTier, required)) {
+    const featureLabel = feature ? ` (${feature})` : "";
+    throw new ApiError(
+      "UPGRADE_REQUIRED",
+      `This feature${featureLabel} requires the ${required.charAt(0).toUpperCase() + required.slice(1)} plan. Please upgrade to continue.`,
+      403,
+      { requiredTier: required, currentTier: user.planTier, feature }
+    );
+  }
+  return user;
 }

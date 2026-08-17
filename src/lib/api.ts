@@ -33,6 +33,12 @@ export function fail(err: unknown) {
   if (err instanceof Error && err.message === "FORBIDDEN") {
     return NextResponse.json({ error: "You don't have access to that.", code: "FORBIDDEN" }, { status: 403 });
   }
+  if (err instanceof ApiError && err.code === "UPGRADE_REQUIRED") {
+    return NextResponse.json(
+      { error: err.message, code: "UPGRADE_REQUIRED", details: err.details },
+      { status: 403 }
+    );
+  }
   console.error("[api] unhandled", err);
   return NextResponse.json(
     { error: "Something went wrong on our end.", code: "INTERNAL" },

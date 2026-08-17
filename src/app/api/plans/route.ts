@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { requireUser, requireTier } from "@/lib/auth";
 import { schemas } from "@/lib/validation";
 import { ok, fail, ApiError, parseZodError } from "@/lib/api";
 import { generateStudyPlan } from "@/lib/ai";
@@ -8,8 +8,7 @@ import { rateLimit } from "@/lib/rate-limit";
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) throw new ApiError("UNAUTHORIZED", "Sign in first.", 401);
+    const user = await requireUser();
     const plans = await db.studyPlan.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
@@ -22,8 +21,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) throw new ApiError("UNAUTHORIZED", "Sign in first.", 401);
+    const user = requireTier(await requireUser(), "pro", "AI Study Plans");
     const rl = await rateLimit({ key: "plan", limit: 10, windowMs: 60000 });
     if (!rl.ok) throw new ApiError("RATE_LIMIT", "Slow down – generating plans takes a moment.", 429);
 

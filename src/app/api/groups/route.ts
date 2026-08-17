@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { requireUser, requireTier } from "@/lib/auth";
 import { ok, fail, ApiError, parseZodError } from "@/lib/api";
 import { z } from "zod";
 
@@ -20,8 +20,7 @@ function genInviteCode() {
 
 export async function GET() {
   try {
-    const user = await getCurrentUser();
-    if (!user) throw new ApiError("UNAUTHORIZED", "Sign in first.", 401);
+    const user = await requireUser();
 
     const memberships = await db.groupMember.findMany({
       where: { userId: user.id },
@@ -43,8 +42,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) throw new ApiError("UNAUTHORIZED", "Sign in first.", 401);
+    const user = requireTier(await requireUser(), "scholar", "Study Groups");
     const body = await req.json().catch(() => ({}));
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) throw new ApiError("VALIDATION", "Check the group details", 400, parseZodError(parsed.error));

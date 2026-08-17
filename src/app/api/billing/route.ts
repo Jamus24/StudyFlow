@@ -1,63 +1,44 @@
 import { NextRequest } from "next/server";
-import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
-import { ok, fail, ApiError } from "@/lib/api";
+import { db } from "lib/db";
+import { getCurrentUser } from "lib/auth";
+import { ok, fail, ApiError } from "lib/api";
+import { isStripeConfigured, getStripe } from "lib/stripe";
 
-const PRICES: Record<string, { tier: string; label: string }> = {
-  pro_monthly: { tier: "pro", label: "Pro · monthly" },
-  pro_yearly: { tier: "pro", label: "Pro · yearly" },
-  scholar_monthly: { tier: "scholar", label: "Scholar · monthly" },
-  scholar_yearly: { tier: "scholar", label: "Scholar · yearly" },
-};
-
-// NOTE: This stubs a Stripe checkout. In production, create a Stripe
-// Checkout Session here and return its URL. We record the upgrade
-// locally so the experience is fully functional in this environment.
-export async function POST(req: NextRequest) {
-  try {
-    const user = await getCurrentUser();
-    if (!user) throw new ApiError("UNAUTHORIZED", "Sign in first.", 401);
-    const { priceId } = await req.json().catch(() => ({}));
-    const price = PRICES[priceId];
-    if (!price) throw new ApiError("BAD_PRICE", "Unknown plan.", 400);
-
-    const updated = await db.user.update({
-      where: { id: user.id },
-      data: {
-        planTier: price.tier,
-        planStatus: "active",
-        stripeCustomerId: `cust_demo_${user.id}`,
-        stripeSubId: `sub_demo_${user.id}_${Date.now()}`,
-      },
-      select: { planTier: true, planStatus: true },
-    });
-    await db.notification.create({
-      data: {
-        userId: user.id,
-        type: "billing",
-        title: "Plan upgraded",
-        body: `You're now on ${price.label}.`,
-        link: "billing",
-      },
-    });
-    await db.activityLog.create({ data: { userId: user.id, action: "billing.upgrade", meta: price.label } });
-    return ok({ subscription: updated, label: price.label });
-  } catch (e) {
-    return fail(e);
-  }
-}
-
+// POST /api/billing (legacy — now handled by /api/billing/checkout)
+// Redirects to the new endpoint for backward compatibility.
+// DELETE /api/billing — cancel subscription (direct DB update for demo,
+// or redirect to Stripe portal for real Stripe).
 export async function DELETE() {
   try {
     const user = await getCurrentUser();
     if (!user) throw new ApiError("UNAUTHORIZED", "Sign in first.", 401);
+
+    // In demo mode, cancel directly in DB
+    if (!isStripeConfigured() || !user.stripeSubId || user.stripeSubId.startsWith("sub_demo_")) {
+      const updated = await db.user.update({
+        where: { id: user.id },
+        data: { planTier: "free", planStatus: "active", stripeSubId: null },
+        select: { planTier: true, planStatus: true },
+      });
+      await db.notification.create({
+        data: { userId: user.id, type: "billing", title: "Subscription canceled", body: "You've been downgraded to the Free plan." },
+      });
+      await db.activityLog.create({ data: { userId: user.id, action: "billing.cancel" } });
+      return ok({ subscription: updated });
+    }
+
+    // Real Stripe: cancel via API
+    const stripe = getStripe();
+    if (user.stripeSubId) {
+      await stripe.subscriptions.cancel(user.stripeSubId);
+    }
     const updated = await db.user.update({
       where: { id: user.id },
-      data: { planTier: "free", planStatus: "active", stripeSubId: null },
+      data: { planStatus: "canceled" },
       select: { planTier: true, planStatus: true },
     });
     await db.notification.create({
-      data: { userId: user.id, type: "billing", title: "Subscription canceled", body: "You'll keep access until the end of the cycle." },
+      data: { userId: user.id, type: "billing", title: "Subscription canceled", body: "You'll keep access until the end of your billing cycle." },
     });
     await db.activityLog.create({ data: { userId: user.id, action: "billing.cancel" } });
     return ok({ subscription: updated });

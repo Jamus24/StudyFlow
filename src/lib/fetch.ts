@@ -1,5 +1,7 @@
 "use client";
 
+import { useUI } from "./store";
+
 export async function api<T = unknown>(
   path: string,
   init?: RequestInit & { json?: unknown }
@@ -27,6 +29,19 @@ export async function api<T = unknown>(
     err.code = code;
     err.status = res.status;
     err.details = (data as { details?: unknown })?.details;
+    // Auto-navigate to billing on upgrade-required errors
+    if (code === "UPGRADE_REQUIRED") {
+      const details = err.details as { requiredTier?: string; feature?: string } | undefined;
+      const tier = details?.requiredTier || "pro";
+      const feature = details?.feature || "";
+      const store = useUI.getState();
+      store.pushToast({
+        title: `${feature || "This feature"} requires ${tier.charAt(0).toUpperCase() + tier.slice(1)}`,
+        description: "Upgrade your plan to unlock this feature.",
+        variant: "default",
+      });
+      store.setAppRoute("billing");
+    }
     throw err;
   }
   return data as T;

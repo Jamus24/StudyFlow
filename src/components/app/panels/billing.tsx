@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CreditCard, Check, Sparkles, Loader2, ShieldCheck, CalendarClock,
-  CheckCircle2, Clock, TrendingUp,
+  CheckCircle2, Clock, TrendingUp, ExternalLink, Info,
 } from "lucide-react";
 import { api } from "@/lib/fetch";
 import { useUI, useAuthStore, type ClientUser } from "@/lib/store";
@@ -44,11 +44,13 @@ const PLANS: PlanDef[] = [
     yearly: 0,
     blurb: "For getting your schedule out of your head.",
     features: [
-      "1 AI plan per week",
+      "Dashboard & streak tracking",
       "Up to 4 subjects",
-      "Pomodoro focus sessions",
+      "Pomodoro focus timer",
+      "Task management",
       "Manual flashcards",
-      "7-day stats",
+      "7-day stats on dashboard",
+      "Leaderboard & achievements",
     ],
   },
   {
@@ -60,13 +62,16 @@ const PLANS: PlanDef[] = [
     highlight: true,
     priceId: "pro_monthly",
     features: [
-      "Unlimited AI plans",
+      "Everything in Free",
+      "Unlimited AI study plans",
       "Unlimited subjects",
-      "AI tutor (threaded)",
+      "AI tutor (threaded chat)",
       "AI flashcard generation",
-      "Weekly AI insights",
-      "Note summaries",
+      "Weekly AI insights & review",
+      "Note AI summaries",
       "Spaced repetition",
+      "Full analytics",
+      "Data export",
       "Priority support",
     ],
   },
@@ -79,8 +84,10 @@ const PLANS: PlanDef[] = [
     priceId: "scholar_monthly",
     features: [
       "Everything in Pro",
-      "Exam-sprint mode",
+      "Exam prep AI strategist",
+      "Mock quizzes (AI-generated)",
       "Deep focus analytics",
+      "Study groups (create & manage)",
       "Calendar sync (soon)",
       "Shared decks",
       "1:1 study coach (monthly)",
@@ -106,22 +113,61 @@ export function BillingPanel() {
   const qc = useQueryClient();
   const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
 
-  const upgrade = useMutation({
+  // Handle ?billing=success|canceled URL params from Stripe redirect
+  const [billingResult, setBillingResult] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const billing = params.get("billing");
+    if (billing === "success" || billing === "canceled") {
+      window.history.replaceState({}, "", window.location.pathname);
+      return billing;
+    }
+    return null;
+  });
+
+  // Re-fetch user data after Stripe redirect
+  useEffect(() => {
+    if (billingResult === "success") {
+      qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      qc.invalidateQueries({ queryKey: ["/api/dashboard"] });
+    }
+  }, [billingResult, qc]);
+
+  // Dismiss result banner after 8s
+  useEffect(() => {
+    if (!billingResult) return;
+    const t = setTimeout(() => setBillingResult(null), 8000);
+    return () => clearTimeout(t);
+  }, [billingResult]);
+
+  const checkout = useMutation({
     mutationFn: (priceId: string) =>
-      api<{ subscription: { planTier: string; planStatus: string }; label: string }>("/api/billing", {
+      api<{ mode: string; url?: string; subscription?: { planTier: string; planStatus: string }; label: string }>("/api/billing/checkout", {
         method: "POST",
         json: { priceId },
       }),
     onSuccess: (r, priceId) => {
+      if (r.mode === "stripe" && r.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = r.url;
+        return;
+      }
+      // Demo mode — update immediately
       const tier = PLANS.find((p) => p.priceId === priceId)?.tier;
       if (data?.user && tier) {
-        setUser({ ...data.user, planTier: tier, planStatus: r.subscription.planStatus });
+        setUser({ ...data.user, planTier: tier, planStatus: r.subscription?.planStatus || "active" });
       }
       qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       qc.invalidateQueries({ queryKey: ["/api/dashboard"] });
-      pushToast({ title: "Plan upgraded", description: `You're now on ${r.label}.`, variant: "success" });
+      pushToast({ title: "Plan upgraded (demo)", description: `You're now on ${r.label}. No real charges.`, variant: "success" });
     },
-    onError: (e: Error) => pushToast({ title: "Could not upgrade", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => pushToast({ title: "Could not start checkout", description: e.message, variant: "destructive" }),
+  });
+
+  const portal = useMutation({
+    mutationFn: () => api<{ url: string }>("/api/billing/portal", { method: "POST" }),
+    onSuccess: (r) => { window.location.href = r.url; },
+    onError: (e: Error) => pushToast({ title: "Could not open portal", description: e.message, variant: "destructive" }),
   });
 
   const cancel = useMutation({
@@ -132,7 +178,7 @@ export function BillingPanel() {
       }
       qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       qc.invalidateQueries({ queryKey: ["/api/dashboard"] });
-      pushToast({ title: "Subscription canceled", description: "You'll keep access until the end of your cycle.", variant: "default" });
+      pushToast({ title: "Subscription canceled", description: "You've been downgraded to Free.", variant: "default" });
     },
     onError: (e: Error) => pushToast({ title: "Could not cancel", description: e.message, variant: "destructive" }),
   });
@@ -164,6 +210,34 @@ export function BillingPanel() {
     <div>
       <PanelHeader title="Billing" description="Manage your subscription" icon={CreditCard} />
 
+      {/* Success/canceled banner from Stripe redirect */}
+      {billingResult === "success" && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 flex items-center gap-3 rounded-xl border border-brand/30 bg-brand/5 p-4"
+        >
+          <CheckCircle2 className="h-5 w-5 text-brand" />
+          <div>
+            <p className="text-sm font-medium">Payment successful! 🎉</p>
+            <p className="text-xs text-muted-foreground">Your subscription is now active.</p>
+          </div>
+        </motion.div>
+      )}
+      {billingResult === "canceled" && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
+        >
+          <Info className="h-5 w-5 text-amber-500" />
+          <div>
+            <p className="text-sm font-medium">Checkout canceled</p>
+            <p className="text-xs text-muted-foreground">No charges were made. Try again anytime.</p>
+          </div>
+        </motion.div>
+      )}
+
       {/* Current plan */}
       <Card className="relative overflow-hidden p-0">
         <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-brand/15 blur-2xl" />
@@ -194,15 +268,28 @@ export function BillingPanel() {
           </div>
 
           {isPaid && (
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={() => cancel.mutate()}
-              disabled={cancel.isPending}
-            >
-              {cancel.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-              Cancel subscription
-            </Button>
+            <div className="flex gap-2">
+              {!user.stripeSubId?.startsWith("sub_demo_") && (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => portal.mutate()}
+                  disabled={portal.isPending}
+                >
+                  {portal.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                  Manage in Stripe
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => cancel.mutate()}
+                disabled={cancel.isPending}
+              >
+                {cancel.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                Cancel
+              </Button>
+            </div>
           )}
         </div>
 
@@ -297,13 +384,14 @@ export function BillingPanel() {
                   <Button
                     className="w-full gap-2"
                     variant={plan.highlight ? "default" : "outline"}
-                    onClick={() => upgrade.mutate(plan.priceId!)}
-                    disabled={upgrade.isPending}
+                    onClick={() => checkout.mutate(resolvePriceId(plan))}
+                    disabled={checkout.isPending}
                   >
-                    {upgrade.isPending && upgrade.variables === plan.priceId ? (
+                    {checkout.isPending && checkout.variables === resolvePriceId(plan) ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : null}
-                    Switch to {plan.name}
+                    {isCurrent ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                    {isCurrent ? "Current plan" : `Switch to ${plan.name}`}
                   </Button>
                 )}
               </div>
@@ -329,7 +417,7 @@ export function BillingPanel() {
             <h3 className="font-display text-base font-semibold">Billing history</h3>
           </div>
           <Badge variant="outline" className="rounded-full gap-1 text-[10px]">
-            <ShieldCheck className="h-3 w-3" /> Stripe test mode
+            <ShieldCheck className="h-3 w-3" /> {isPaid && !user.stripeSubId?.startsWith("sub_demo_") ? "Live" : "Demo mode"}
           </Badge>
         </div>
         {isPaid ? (
@@ -363,7 +451,13 @@ export function BillingPanel() {
           </div>
         )}
         <p className="border-t border-border bg-muted/30 px-5 py-3 text-[11px] text-muted-foreground">
-          Stripe is in test mode – no real charges are made. Update your saved card in a future release.
+          {isPaid && user.stripeSubId?.startsWith("sub_demo_") ? (
+            <span>Demo mode — no real charges. Connect Stripe to accept real payments.</span>
+          ) : isPaid ? (
+            <span>Powered by <strong>Stripe</strong>. Secure payments, PCI-compliant. Cancel anytime.</span>
+          ) : (
+            <span>Secure payments powered by Stripe. Cancel anytime.</span>
+          )}
         </p>
       </Card>
     </div>
@@ -371,6 +465,12 @@ export function BillingPanel() {
 }
 
 /* ---------------- Helpers ---------------- */
+
+function resolvePriceId(plan: PlanDef): string {
+  return cycle === "yearly" && plan.yearly > 0
+    ? `${plan.tier}_yearly` as string
+    : `${plan.tier}_monthly` as string;
+}
 
 function StatusBadge({ status }: { status: string }) {
   const variant: any = status === "active" ? "default" : status === "trialing" ? "secondary" : status === "past_due" ? "destructive" : "outline";

@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
+import { FREE_LIMITS } from "@/lib/tier";
 import { schemas } from "@/lib/validation";
 import { ok, fail, ApiError, parseZodError, parsePagination } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) throw new ApiError("UNAUTHORIZED", "Sign in first.", 401);
+    const user = await requireUser();
     const { q } = parsePagination(req);
     const subjects = await db.subject.findMany({
       where: {
@@ -28,11 +28,17 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getCurrentUser();
-    if (!user) throw new ApiError("UNAUTHORIZED", "Sign in first.", 401);
+    const user = await requireUser();
     const body = await req.json().catch(() => ({}));
     const parsed = schemas.subject.safeParse(body);
     if (!parsed.success) throw new ApiError("VALIDATION", "Check the fields", 400, parseZodError(parsed.error));
+    // Free users: limit to 4 subjects
+    if (user.planTier === "free") {
+      const count = await db.subject.count({ where: { userId: user.id } });
+      if (count >= FREE_LIMITS.maxSubjects) {
+        throw new ApiError("UPGRADE_REQUIRED", `Free accounts are limited to ${FREE_LIMITS.maxSubjects} subjects. Upgrade to Pro for unlimited subjects.`, 403, { requiredTier: "pro", currentTier: "free", feature: "Unlimited Subjects" });
+      }
+    }
     const max = await db.subject.count({ where: { userId: user.id } });
     const subject = await db.subject.create({
       data: {

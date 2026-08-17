@@ -22,13 +22,16 @@ import {
   BarChart3, Settings, CreditCard, Bell, Search, LogOut, ChevronLeft, ChevronRight,
   Menu, Sparkles, Clock, FlaskConical, BookOpen, PanelLeftClose, PanelLeft, UserCog, Shield,
   Plus, Flame, X, Timer, Trophy, FileText, Users, UsersRound, GraduationCap, HelpCircle,
+  Lock, Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LayersIcon } from "@/components/shared/icons";
+import { ROUTE_TIERS, tierSatisfies } from "@/lib/tier";
+
+import { PaywallBanner } from "@/components/shared/paywall-banner";
+import { useFeatureGate } from "@/hooks/use-feature-gate";
 
 // Lazy-load every panel so only the active one compiles at a time.
-// This is critical in the 4GB sandbox – eagerly importing all 14 panels
-// (each pulling recharts + framer-motion) caused Turbopack to OOM-kill.
 const panelLoader = (p: string) =>
   dynamic(() => import(`./panels/${p}`).then((m) => m.default as any), {
     loading: () => <PanelSkeleton />,
@@ -179,6 +182,8 @@ export function AppShell() {
               <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const active = appRoute === item.id;
+                  const gate = ROUTE_TIERS[item.id as keyof typeof ROUTE_TIERS];
+                  const locked = gate ? !tierSatisfies(user?.planTier ?? "free", gate.tier) : false;
                   return (
                     <button
                       key={item.id}
@@ -189,15 +194,35 @@ export function AppShell() {
                       className={cn(
                         "group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
                         active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                        locked && !active && "opacity-70",
                         collapsed && "justify-center px-0"
                       )}
-                      title={collapsed ? item.label : undefined}
+                      title={collapsed ? (locked ? `${item.label} (${gate.tier})` : item.label) : undefined}
                     >
                       {active && !collapsed && (
                         <motion.span layoutId="nav-active" className="absolute left-0 h-5 w-1 rounded-r-full bg-brand" />
                       )}
                       <item.icon className={cn("h-[18px] w-[18px] shrink-0", active ? "text-brand" : "")} />
-                      {!collapsed && <span>{item.label}</span>}
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 text-left">{item.label}</span>
+                          {locked && (
+                            <span className={cn(
+                              "flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                              gate.tier === "pro" ? "bg-brand/10 text-brand" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                            )}>
+                              <Lock className="h-2.5 w-2.5" />
+                              {gate.tier}
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {collapsed && locked && (
+                        <span className={cn(
+                          "absolute right-1 top-1 h-1.5 w-1.5 rounded-full",
+                          gate.tier === "pro" ? "bg-brand" : "bg-amber-500"
+                        )} />
+                      )}
                     </button>
                   );
                 })}
@@ -322,6 +347,15 @@ export function AppShell() {
   }
 
   function PanelRouter() {
+    const gate = useFeatureGate(appRoute);
+    if (!gate.allowed) {
+      return (
+        <PaywallBanner
+          featureLabel={gate.featureLabel}
+          requiredTier={gate.requiredTier!}
+        />
+      );
+    }
     switch (appRoute) {
       case "dashboard": return <DashboardPanel />;
       case "focus": return <FocusPanel />;
@@ -370,6 +404,7 @@ function PanelSkeleton() {
 
 function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const setAppRoute = useUI((s) => s.setAppRoute);
+  const user = useAuthStore((s) => s.user);
   const go = (route: any) => { setAppRoute(route); onOpenChange(false); };
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
@@ -377,12 +412,25 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
       <CommandList>
         <CommandEmpty>No results.</CommandEmpty>
         <CommandGroup heading="Navigate">
-          {NAV.flatMap((s) => s.items).map((item) => (
-            <CommandItem key={item.id} onSelect={() => go(item.id)}>
-              <item.icon className="mr-2 h-4 w-4" />
-              {item.label}
-            </CommandItem>
-          ))}
+          {NAV.flatMap((s) => s.items).map((item) => {
+            const gate = ROUTE_TIERS[item.id as keyof typeof ROUTE_TIERS];
+            const locked = gate ? !tierSatisfies(user?.planTier ?? "free", gate.tier) : false;
+            return (
+              <CommandItem key={item.id} onSelect={() => go(item.id)}>
+                <item.icon className="mr-2 h-4 w-4" />
+                {item.label}
+                {locked && (
+                  <span className={cn(
+                    "ml-auto flex items-center gap-1 text-[10px] font-semibold",
+                    gate.tier === "pro" ? "text-brand" : "text-amber-500"
+                  )}>
+                    <Lock className="h-3 w-3" />
+                    {gate.tier}
+                  </span>
+                )}
+              </CommandItem>
+              );
+          })}
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Actions">
