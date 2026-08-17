@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppProviders } from "@/components/app-providers";
+import { Analytics } from "@vercel/analytics/next";
 
 const sans = Inter({
   variable: "--font-sans",
@@ -128,6 +129,7 @@ export default function RootLayout({
           <Toaster />
           <Sonner position="bottom-right" richColors closeButton />
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
